@@ -1,0 +1,300 @@
+---
+title: "Understanding and Detecting Sleep Patterns"
+output:
+  html_document: default
+---
+
+##Reading Data and Processing
+```{r}
+df <- read.csv("Data_Final_filled.csv",header=TRUE)
+df<-subset(df, select = -c(X,USER,day,ibi_s))
+df <- transform(
+  df,
+  sleeping=as.factor(sleeping)
+)
+head(df)
+```
+##Loading packages and Data Splitting
+
+```{r}
+set.seed(123)
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+library(patchwork)
+library(gridExtra)
+library(psych)
+library(corrplot)
+library(ggfortify)
+library(factoextra)
+library(class) #knn
+library(gmodels) # CrossTable()
+library(caret) # creatFolds()
+library(caTools) #sample.split()
+library(ROCR) # prediction(), performance()
+
+library(psych) # pairs.panels()
+library(leaps) # regsubsets()
+library(glmnet)
+
+#split data into 80% train and 20% split
+sample <- sample.split(df$sleeping,SplitRatio = 0.8)
+train_df <- as.data.frame(subset(df,sample ==TRUE))
+test_df <-as.data.frame( subset(df, sample==FALSE))
+
+#subset the data according to the unput needed
+train <- subset(train_df, select = -c(sleeping))
+test <- subset(test_df, select = -c(sleeping))
+tr_y <- train_df$sleeping
+te_y <- test_df$sleeping
+```
+##Distribution of Labels
+```{r}
+#data distribution on original data
+summary(as.factor(tr_y))
+summary(as.factor(te_y))
+```
+
+
+##Logistic Regression
+```{r}
+#training the Logistic Regression model
+gm <- glm(as.factor(sleeping) ~ ., family = binomial(link="logit"), data=train_df)
+summary(gm)
+```
+
+##Confusion Matrix and Accuracy
+```{r}
+library("mlr")
+p<- predict(gm, test,type="response")
+pred_gm<-ifelse(p>0.5,1,0)
+mean(pred_gm == test_df["sleeping"])
+table(pred_gm,te_y)
+```
+
+##Evaluation Metrics
+```{r}
+mean((pred_gm - as.numeric(te_y))^2)
+library(caret)
+precision_ <- posPredValue(as.factor(pred_gm), te_y, positive="1")
+recall_ <- sensitivity(as.factor(pred_gm), te_y, positive="1")
+F1_ <- (2 * precision_ * recall_) / (precision_ + recall_)
+precision_
+recall_
+F1_
+```
+
+
+##Plotting the ROC Curve and AUC
+```{r}
+library(ROCR)
+ROCRpred<-prediction(p,test_df$sleeping)
+ROCRperf<-ROCR::performance(ROCRpred,measure ="tpr",x.measure ="fpr")
+auc.train1 <-ROCR::performance(ROCRpred,measure = "auc")
+
+auc.train1 <- auc.train1@y.values
+
+
+plot(ROCRperf,  text.adj=c(-0.2,1.7),main = "ROC Curve for Logistic Regression Model")
+abline(a=0, b= 1)
+```
+
+
+```{r}
+auc.train1
+```
+
+##Random Forest
+
+```{r}
+#hypterparameter tuning on number of trees
+hyper_grid_2 <-seq(100, 500, by = 100)
+
+for(i in hyper_grid_2) {
+  
+  # train model
+  model <-randomForest(
+  as.factor(sleeping)~ .,
+  data=train_df, mtry = 2, ntreeTry= i,
+)
+  te_pred <- predict(model, test,type="response")
+  res<- mean(te_pred==te_y)
+  print(res)
+}
+# ntreeTry = 500 was chose as it gave the highest accuracy
+```
+
+```{r}
+#implementing the optimal model
+library(randomForest)
+rf <- randomForest(
+  as.factor(sleeping)~ .,
+  data=train_df, ntreeTry= 500,
+)
+#predictions on test data
+te_pred <- predict(rf, test,type="response")
+#calculate the accuracy
+mean(te_pred==te_y)
+```
+
+##Condision Matrix on Train and accuracy
+```{r}
+#Condision Matrix on Train data
+tr_pred = predict(rf, newdata=train)
+table(tr_y, tr_pred)
+```
+
+##Condision Matrix on Test and accuracy
+```{r}
+#Condision Matrix on Test on test data
+te_pred <- predict(rf, test,type="response")
+table(te_y, te_pred)
+#accuracy
+mean(te_pred==te_y)
+```
+
+##Evaluation Metrics
+```{r}
+#MSE
+mean((as.numeric(te_pred )- as.numeric(te_y))^2)
+library(caret)
+precision <- posPredValue(te_pred, te_y, positive="1")
+recall <- sensitivity(te_pred, te_y, positive="1")
+F1 <- (2 * precision * recall) / (precision + recall)
+precision
+recall
+F1
+```
+
+##Plotting the ROC Curve and AUC
+```{r}
+library(ROCR)
+predict_rf <- predict(rf, test_df, type = 'prob')
+predict_rf<- as.data.frame(predict_rf)
+ROCRpred<-prediction(predict_rf["1"],test_df$sleeping)
+ROCRperf<-ROCR::performance(ROCRpred,measure ="tpr",x.measure ="fpr")
+auc.train <-ROCR::performance(ROCRpred,measure = "auc")
+
+auc.train <- auc.train@y.values
+
+plot(ROCRperf, text.adj=c(-0.2,1.7),main = "ROC Curve for Random Forest Model") #print.cutoffs.at=seq(0,1,by=0.1)
+abline(a=0, b= 1)
+```
+```{r}
+auc.train
+```
+
+
+
+
+
+
+
+
+##XGB
+
+```{r}
+#library loading and data processing
+library(xgboost)
+library(readr)
+library(stringr)
+library(caret)
+
+sparse_matrix <- sparse.model.matrix(as.factor(sleeping)~ ., data = train_df)
+sparse_matrix2 <- sparse.model.matrix(as.factor(sleeping)~ ., data = test_df)
+```
+
+
+```{r}
+#hyper parameter tuning
+hyper_grid_3 <-seq(1, 10, by = 1)
+
+for(i in hyper_grid_3) {
+  
+  # train model
+  model <- xgboost(data = sparse_matrix, label = as.matrix(tr_y), max.depth = i, eta = 0.4, nthread = 20, nrounds = 20, objective = "binary:logistic",eval.metric = "error", eval.metric = "logloss")
+  
+  predxbg <- predict(model, sparse_matrix2)
+  predictionxgb <- as.numeric(predxbg > 0.5)
+  res<- mean(predictionxgb == test_df["sleeping"])
+  
+  print(res)
+}
+#chose max.depth = 10 as it gave the best accuracy
+```
+
+
+```{r}
+#Model with the best parameters
+bstSparse <- xgboost(data = sparse_matrix, label = as.matrix(tr_y), max.depth = 10, eta = 0.4, nthread = 20, nrounds = 20, objective = "binary:logistic",eval.metric = "error", eval.metric = "logloss")
+```
+
+##Confusion Matrix and Accuracy
+```{r}
+predxbg <- predict(bstSparse, sparse_matrix2)
+predictionxgb <- as.numeric(predxbg > 0.5)
+
+
+table(te_y, predictionxgb)
+
+mean(predictionxgb == test_df["sleeping"])
+
+```
+
+##Evaluation Metrics
+```{r}
+mean((predxbg- as.numeric(te_y))^2)
+library(caret)
+precision3 <- posPredValue(as.factor(predictionxgb), te_y, positive="1")
+recall3 <- sensitivity(as.factor(predictionxgb), as.factor(te_y), positive="1")
+F13 <- (2 * precision3 * recall3) / (precision3 + recall3)
+precision3
+recall3
+F13
+```
+
+##Plotting the ROC Curve and AUC
+```{r}
+library(ROCR)
+ROCRpred3 <-prediction(predxbg ,test_df$sleeping)
+ROCRperf3 <-ROCR::performance(ROCRpred3 ,measure ="tpr",x.measure ="fpr")
+auc.train3 <-ROCR::performance(ROCRpred3 ,measure = "auc")
+
+auc.train3 <- auc.train3@y.values
+
+
+plot(ROCRperf3, main = "ROC Curve for XGB Model")
+abline(a=0, b= 1)
+```
+
+```{r}
+auc.train3
+```
+
+
+##Final Plot
+```{r}
+library(ROCR)
+data(ROCR.simple)
+ROCRpred1 <-prediction(predict_rf["1"],test_df$sleeping)
+ROCRpred2 <-prediction(p,test_df$sleeping)
+
+ROCRperf1 <-ROCR::performance(ROCRpred1 ,measure ="tpr",x.measure ="fpr")
+ROCRperf2 <-ROCR::performance(ROCRpred2 ,measure ="tpr",x.measure ="fpr")
+
+
+ROCRpred3 <-prediction(predxbg ,test_df$sleeping)
+ROCRperf3 <-ROCR::performance(ROCRpred3 ,measure ="tpr",x.measure ="fpr")
+
+
+plot(ROCRperf1, text.adj=c(-0.2,1.7),main = "ROC Curve for Logistic Regression, Random Forest and XGB",col="red")
+plot(ROCRperf2, add = TRUE,col="blue")
+plot(ROCRperf3, add = TRUE,col="green")
+abline(a=0, b= 1,lty=2)
+```
+
+
+
+
+
+
