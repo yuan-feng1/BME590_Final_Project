@@ -1,0 +1,84 @@
+---
+PROJECT
+title: "Project"
+author: "Hansori Chang"
+date: "11/9/2020"
+output: html_document
+---
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+library(patchwork)
+library(gridExtra)
+```
+
+```{r}
+data <- read.csv("Data_Final_filled.csv")
+```
+
+```{r}
+HB1 <- ggplot(subset(data, USER ==1), aes(x=time, y=HR))+geom_line() + labs(x="TIME", y="BPM") + ggtitle("Actigraph")
+
+HB2 <- ggplot(subset(data, USER ==1), aes(x=time, y=ibi_s)) +geom_line() + labs(x="TIME", y="BPM") + ggtitle("Heart Beat Monitor")
+
+HB1/HB2
+```
+```{r}
+Standing <- ggplot(subset(data, USER ==1), aes(x=time, y=Inclinometer.Standing))+geom_line() + labs(x="TIME", y="Frequency") + ggtitle("Standing")
+Sitting <- ggplot(subset(data, USER ==1), aes(x=time, y=Inclinometer.Sitting))+geom_line() + labs(x="TIME", y="Frequency") + ggtitle("Sitting")
+Lying <- ggplot(subset(data, USER ==1), aes(x=time, y=Inclinometer.Lying))+geom_line() + labs(x="TIME", y="Frequency") + ggtitle("Lying")
+Off <- ggplot(subset(data, USER ==1), aes(x=time, y=Inclinometer.Off))+geom_line() + labs(x="TIME", y="Frequency") + ggtitle("Off")
+Standing/Sitting/Lying/Off
+```
+
+```{r}
+
+Actigraph <- ggplot(data, aes(x=HR)) + geom_histogram(aes(y=..density..), color = "red", fill="peachpuff", binwidth = 10) + geom_density(alpha=.2, color = "red", fill="red") + geom_vline(aes(xintercept=mean(HR)), color='red', linetype="dashed")  + xlab("Heart Rate from Actigraph")
+
+Heartbeat <- ggplot(data, aes(x=ibi_s)) + geom_histogram(aes(y=..density..), color = "red", fill="peachpuff", binwidth = 10) + geom_density(alpha=.2, color = "red", fill="red") + geom_vline(aes(xintercept=mean(ibi_s)), color='red', linetype="dashed")  + xlab("Heart Rate from Actigraph")
+
+Sit <- ggplot(data, aes(x=Inclinometer.Sitting)) + geom_histogram(aes(y=..density..), color = "red", fill="peachpuff", binwidth = 5) + geom_density(alpha=.2, color = "red", fill="red") + geom_vline(aes(xintercept=mean(Inclinometer.Sitting)), color='red', linetype="dashed")  + xlab("Inclinometer Sitting")
+
+Stand <- ggplot(data, aes(x=Inclinometer.Standing)) + geom_histogram(aes(y=..density..), color = "red", fill="peachpuff", binwidth = 5) + geom_density(alpha=.2, color = "red", fill="red") + geom_vline(aes(xintercept=mean(HR)), color='red', linetype="dashed")  + xlab("Inclinometer Standing")
+
+Lying <- ggplot(data, aes(x=Inclinometer.Lying)) + geom_histogram(aes(y=..density..), color = "red", fill="peachpuff", binwidth = 5) + geom_density(alpha=.2, color = "red", fill="red") + geom_vline(aes(xintercept=mean(Inclinometer.Lying)), color='red', linetype="dashed")  + xlab("Inclinometer Standing")
+
+Off <- ggplot(data, aes(x=Inclinometer.Off)) + geom_histogram(aes(y=..density..), color = "red", fill="peachpuff", binwidth = 5) + geom_density(alpha=.2, color = "red", fill="red") + geom_vline(aes(xintercept=mean(Inclinometer.Off)), color='red', linetype="dashed")  + xlab("Inclinometer Standing")
+
+(Actigraph|Heartbeat)/(Lying|Off)/(Stand|Sit)
+```
+
+
+```{r}
+library(plyr)
+data$sleeping <- as.logical(data$sleeping)
+act <- ddply(data, "sleeping", summarise, grp.mean=mean(HR))
+hbm <- ddply(data, "sleeping", summarise, grp.mean=mean(ibi_s))
+lying<- ddply(data, "sleeping", summarise, grp.mean=mean(Inclinometer.Lying))
+Standing<- ddply(data, "sleeping", summarise, grp.mean=mean(Inclinometer.Standing))
+off<- ddply(data, "sleeping", summarise, grp.mean=mean(Inclinometer.Off))
+sitting<- ddply(data, "sleeping", summarise, grp.mean=mean(Inclinometer.Sitting))
+
+act2 <- ggplot(data, aes(x=HR, color = sleeping, fill = sleeping)) + geom_density(alpha=0.4) + geom_vline(data=act, aes(xintercept=grp.mean, color=sleeping))
+
+hbm2 <- ggplot(data, aes(x=ibi_s, color = sleeping, fill = sleeping)) + geom_density(alpha=0.4) + geom_vline(data=hbm, aes(xintercept=grp.mean, color=sleeping))
+
+lye2 <- ggplot(data, aes(x=Inclinometer.Lying, color = sleeping, fill = sleeping)) + geom_density(alpha=0.4) + geom_vline(data=lying, aes(xintercept=grp.mean, color=sleeping))
+
+stand2 <- ggplot(data, aes(x=Inclinometer.Standing, color = sleeping, fill = sleeping)) + geom_density(alpha=0.4) + geom_vline(data=Standing, aes(xintercept=grp.mean, color=sleeping))
+
+off2 <- ggplot(data, aes(x=Inclinometer.Off, color = sleeping, fill = sleeping)) + geom_density(alpha=0.4) + geom_vline(data=off, aes(xintercept=grp.mean, color=sleeping))
+
+sit2 <- ggplot(data, aes(x=Inclinometer.Sitting, color = sleeping, fill = sleeping)) + geom_density(alpha=0.4) + geom_vline(data=sitting, aes(xintercept=grp.mean, color=sleeping))
+(act2|hbm2)/(lye2|stand2)/(off2|sit2)
+```
+```{r}
+library(corrplot)
+M <-cor(data)
+corrplot(M, method="number", type="lower")
+```
+```{r}
+data
+```
+
