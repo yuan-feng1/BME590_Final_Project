@@ -1,0 +1,52 @@
+---
+title: "asdsad"
+author: "Hansori Chang"
+date: "10/8/2020"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+data=read.csv("Actigraph.csv") 
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(lubridate)
+new_data <- data.frame(Date=as.Date(character()),
+                 File=character(), 
+                 User=character(), 
+                 stringsAsFactors=FALSE) 
+data$time <- strptime(paste("2020-01-01",data$time), format = "%Y-%m-%d %H:%M:%OS")
+```
+```{r}
+data$day[data$day==-29] <- 2
+data$time[data$day==2] <- data$time[data$day==2] + 24*60*60
+```
+
+```{r}
+for(i in 1:22){
+  user1 <- data %>%
+    filter(data$X.USER.==i)
+  X <- user1 %>%
+    filter(user1$day==1)
+  Y <- user1 %>%
+    filter(user1$day==2)
+  user1 <- rbind(X,Y)
+  A <- user1$time[1]
+  user1$time<-as.numeric(difftime(as.POSIXct(user1$time, format = "%Y-%m-%d %H:%M:%OS"), as.POSIXct(A, format = "%Y-%m-%d %H:%M:%OS"), units = 'min'))
+  user1 <- user1 %>% 
+    complete(time = full_seq(0:max(time), 1), fill = list(vol = 0))
+  new_data = rbind(new_data, user1)}
+```
+
+```{r}
+new_data
+```
+```{r}
+write.csv(new_data,'Actigraph_final2.csv')
+```
+
+
+
